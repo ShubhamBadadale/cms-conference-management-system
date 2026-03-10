@@ -5,8 +5,9 @@ const downloadCertificate = async (req, res) => {
   try {
     const paperId = req.params.paper_id;
 
+    // FIX: Changed 'WHERE id = ?' to 'WHERE paper_id = ?'
     const [rows] = await db.query(
-      "SELECT certificate_path FROM Certificates WHERE id = ?",
+      "SELECT certificate_path FROM Certificates WHERE paper_id = ?",
       [paperId],
     );
 
@@ -14,12 +15,11 @@ const downloadCertificate = async (req, res) => {
       return res.status(404).json({ message: "Certificate not found" });
     }
 
-    const path = require("path");
-
+    // path is already required at the top of your file
     const filePath = path.join(
       __dirname,
       "../uploads/certificates",
-      rows[0].certificate_path,
+      rows[0].certificate_path, // Ensure this only contains the filename (e.g., 'cert123.pdf')
     );
 
     res.download(filePath);
