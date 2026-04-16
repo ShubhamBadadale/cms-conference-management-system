@@ -43,11 +43,13 @@ export const getPaperReviews = (paperId) => API.get(`/papers/${paperId}/reviews`
 
 // Reviews
 export const getAssignedPapers = () => API.get('/reviews/assigned');
+export const getReviewerWorkload = () => API.get('/reviews/workload');
 export const submitReview = (data) => API.post('/reviews/submit', data);
 export const getReviewsForPaper = (paperId) => API.get(`/reviews/paper/${paperId}`);
 
 // Admin
 export const getAllUsers = () => API.get('/admin/users');
+export const updateUserRole = (userId, role) => API.patch(`/admin/users/${userId}/role`, { role });
 export const getReviewers = () => API.get('/admin/reviewers');
 export const assignReviewer = (data) => API.post('/admin/assign-reviewer', data);
 export const makeDecision = (data) => API.post('/admin/decision', data);
@@ -55,6 +57,7 @@ export const getAcceptedPapers = () => API.get('/admin/accepted-papers');
 export const sendNotification = (data) => API.post('/admin/notify', data);
 export const generateCertificate = (data) => API.post('/admin/generate-certificate', data);
 export const getDashboardStats = () => API.get('/admin/stats');
+export const getNoSqlAnalytics = () => API.get('/nosql/analytics');
 
 // Coordinator
 export const getPresentationSchedule = () => API.get('/coordinator/schedule');

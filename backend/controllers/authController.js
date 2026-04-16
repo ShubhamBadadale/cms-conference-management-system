@@ -5,13 +5,9 @@ require('dotenv').config();
 
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, institution } = req.body;
-    if (!name || !email || !password || !role) {
+    const { name, email, password, institution } = req.body;
+    if (!name || !email || !password) {
       return res.status(400).json({ message: 'All fields are required' });
-    }
-    const validRoles = ['author', 'reviewer', 'coordinator'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({ message: 'Invalid role. Admins are pre-created.' });
     }
     const [existing] = await db.query('SELECT id FROM Users WHERE email = ?', [email]);
     if (existing.length > 0) {
@@ -20,9 +16,12 @@ const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const [result] = await db.query(
       'INSERT INTO Users (name, email, password, role, institution) VALUES (?, ?, ?, ?, ?)',
-      [name, email, hashedPassword, role, institution || '']
+      [name, email, hashedPassword, 'pending', institution || '']
     );
-    res.status(201).json({ message: 'Registration successful', userId: result.insertId });
+    res.status(201).json({
+      message: 'Registration successful. Your account is pending admin approval.',
+      userId: result.insertId
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -43,6 +42,9 @@ const login = async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    if (user.role === 'pending') {
+      return res.status(403).json({ message: 'Your account is awaiting admin approval.' });
     }
     const token = jwt.sign(
       { id: user.id, name: user.name, email: user.email, role: user.role },

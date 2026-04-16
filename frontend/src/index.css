@@ -141,6 +141,7 @@ tbody tr:hover { background: var(--bg); }
 .badge-published { background: #c6f6d5; color: #22543d; }
 .badge-draft { background: #e2e8f0; color: #4a5568; }
 .badge-author { background: #bee3f8; color: #2c5282; }
+.badge-pending { background: #faf089; color: #744210; }
 .badge-reviewer { background: #d6bcfa; color: #44337a; }
 .badge-admin { background: #fed7d7; color: #9b2c2c; }
 .badge-coordinator { background: #feebc8; color: #744210; }
@@ -201,8 +202,21 @@ tbody tr:hover { background: var(--bg); }
 .score-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: 4px; transition: width 0.5s; }
 .score-bar-val { font-size: 13px; font-weight: 700; color: var(--primary); min-width: 28px; }
 
+.user-role-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.table-note {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar { width: 200px; }
   .main-content { margin-left: 200px; padding: 20px; }
+  .user-role-action { min-width: 180px; }
 }

@@ -1,9 +1,69 @@
 const db = require('../config/db');
 
+const getDbErrorMessage = (err) => err.sqlMessage || err.message || 'Server error';
+const validAssignableRoles = ['author', 'reviewer', 'coordinator'];
+
+const getWorkflowErrorStatus = (message) => {
+  if (message === 'Reviewer already assigned') return 409;
+  if (['Paper not found', 'Invalid reviewer'].includes(message)) return 400;
+  return 500;
+};
+
 const getAllUsers = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT id, name, email, role, institution, created_at FROM Users ORDER BY created_at DESC');
+    const [rows] = await db.query(
+      `SELECT id, name, email, role, institution, created_at
+       FROM Users
+       ORDER BY CASE WHEN role = 'pending' THEN 0 ELSE 1 END, created_at DESC`
+    );
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+const assignUserRole = async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const { role } = req.body;
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ message: 'Valid user id is required' });
+    }
+
+    if (!validAssignableRoles.includes(role)) {
+      return res.status(400).json({ message: 'Role must be author, reviewer, or coordinator' });
+    }
+
+    const [users] = await db.query(
+      'SELECT id, name, email, role FROM Users WHERE id = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = users[0];
+
+    if (user.role === 'admin') {
+      return res.status(400).json({ message: 'Admin accounts cannot be changed here' });
+    }
+
+    if (user.role !== 'pending') {
+      return res.status(400).json({ message: 'Only pending users can be approved' });
+    }
+
+    await db.query('UPDATE Users SET role = ? WHERE id = ?', [role, userId]);
+    await db.query(
+      'INSERT INTO Notifications (user_id, message) VALUES (?, ?)',
+      [userId, `Your account has been approved as ${role}. You can now sign in.`]
+    );
+
+    res.json({
+      message: `User approved as ${role}`,
+      user: { ...user, role }
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -26,23 +86,21 @@ const getReviewers = async (req, res) => {
 const assignReviewer = async (req, res) => {
   try {
     const { paper_id, reviewer_id } = req.body;
-    // Verify reviewer role
-    const [reviewer] = await db.query("SELECT id FROM Users WHERE id = ? AND role = 'reviewer'", [reviewer_id]);
-    if (reviewer.length === 0) return res.status(400).json({ message: 'Invalid reviewer' });
-    // Check not already assigned
-    const [existing] = await db.query(
-      'SELECT id FROM ReviewerAssignments WHERE paper_id = ? AND reviewer_id = ?', [paper_id, reviewer_id]
-    );
-    if (existing.length > 0) return res.status(409).json({ message: 'Reviewer already assigned' });
-    await db.query('INSERT INTO ReviewerAssignments (paper_id, reviewer_id) VALUES (?, ?)', [paper_id, reviewer_id]);
-    await db.query("UPDATE Papers SET status = 'under_review' WHERE id = ? AND status = 'submitted'", [paper_id]);
-    // Notify reviewer
-    const [paper] = await db.query('SELECT * FROM Papers WHERE id = ?', [paper_id]);
-    await db.query('INSERT INTO Notifications (user_id, message) VALUES (?, ?)',
-      [reviewer_id, `You have been assigned to review: "${paper[0].title}"`]);
+
+    if (!paper_id || !reviewer_id) {
+      return res.status(400).json({ message: 'paper_id and reviewer_id are required' });
+    }
+
+    await db.query('CALL sp_assign_reviewer_atomic(?, ?, ?)', [
+      paper_id,
+      reviewer_id,
+      req.user.id,
+    ]);
+
     res.json({ message: 'Reviewer assigned successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    const message = getDbErrorMessage(err);
+    res.status(getWorkflowErrorStatus(message)).json({ message, error: err.message });
   }
 };
 
@@ -169,4 +227,14 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, getReviewers, assignReviewer, makeDecision, getAcceptedPapers, sendNotification, generateCertificate, getDashboardStats };
+module.exports = {
+  getAllUsers,
+  assignUserRole,
+  getReviewers,
+  assignReviewer,
+  makeDecision,
+  getAcceptedPapers,
+  sendNotification,
+  generateCertificate,
+  getDashboardStats
+};

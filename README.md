@@ -119,6 +119,8 @@ DB_PASSWORD=yourpassword
 DB_NAME=cms_db
 JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
 JWT_EXPIRE=7d
+MONGO_URI=mongodb://127.0.0.1:27017
+MONGO_DB_NAME=cms_nosql_showcase
 ```
 
 Start the backend:
@@ -161,7 +163,7 @@ Frontend runs on: **http://localhost:3000**
 ### Authentication
 | Method | Endpoint | Access |
 |--------|----------|--------|
-| POST | /api/auth/register | Public |
+| POST | /api/auth/register | Public, creates pending account |
 | POST | /api/auth/login | Public |
 | GET | /api/auth/me | Auth |
 
@@ -195,6 +197,7 @@ Frontend runs on: **http://localhost:3000**
 | Method | Endpoint | Access |
 |--------|----------|--------|
 | GET | /api/admin/users | Admin |
+| PATCH | /api/admin/users/:id/role | Admin |
 | GET | /api/admin/reviewers | Admin |
 | POST | /api/admin/assign-reviewer | Admin |
 | POST | /api/admin/decision | Admin |
@@ -234,6 +237,43 @@ Frontend runs on: **http://localhost:3000**
 
 ---
 
+## DBMS Showcase Scripts
+
+For DBMS practical/demo coverage, the repo includes optional scripts that extend the same conference-management domain:
+
+```bash
+mysql -u root -p cms_db < sql/dbms_showcase.sql
+mysql -u root -p cms_db < sql/dbms_lab_queries.sql
+mongosh mongodb/cms_mongodb_showcase.js
+```
+
+- `sql/dbms_showcase.sql` adds normalized extension tables, indexes, views, stored functions, procedures, cursors, triggers, transaction routines, audit/recovery tables, distributed metadata, and warehouse snapshots.
+- `sql/dbms_lab_queries.sql` contains ready-made SELECT, join, subquery, set operator, view, DCL, TCL, and EXPLAIN examples.
+- `docs/DBMS_SHOWCASE.md` maps the DBMS syllabus concepts to the actual implementation.
+
+### NoSQL Analytics Integration
+
+The backend also exposes a MongoDB-backed analytics endpoint:
+
+```bash
+GET /api/nosql/analytics
+```
+
+Add these values in `backend/.env`:
+
+```env
+MONGO_URI=mongodb://127.0.0.1:27017
+MONGO_DB_NAME=cms_nosql_showcase
+```
+
+How it works:
+
+- MySQL remains the source of truth for users, papers, reviews, decisions, and certificates.
+- `/api/nosql/analytics` reads `vw_conference_metrics_olap`, stores the analytics as MongoDB documents in `conferenceAnalytics`, and returns them to the Admin Dashboard.
+- If MongoDB is not running, the app still works and the dashboard shows fallback analytics from MySQL.
+
+---
+
 ## 🔄 Conference Workflow
 
 ```
@@ -256,6 +296,7 @@ Frontend runs on: **http://localhost:3000**
 - JWT tokens with expiry (7 days)
 - bcrypt password hashing (salt rounds: 10)
 - Role-based route protection (middleware)
+- New registrations stay in `pending` until approved by admin
 - File type validation (PDF only, 20MB max)
 - Reviewer can only access their assigned papers
 

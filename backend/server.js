@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { runBootstrap } = require('./config/bootstrap');
 require('dotenv').config();
 
 const app = express();
@@ -21,6 +22,7 @@ app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/coordinator', require('./routes/coordinatorRoutes'));
 app.use('/api/user', require('./routes/userRoutes'));
+app.use('/api/nosql', require('./routes/nosqlRoutes'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'CMS Backend Running' }));
@@ -32,4 +34,10 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`CMS Server running on port ${PORT}`));
+
+const startServer = async () => {
+  await runBootstrap();
+  app.listen(PORT, () => console.log(`CMS Server running on port ${PORT}`));
+};
+
+startServer();

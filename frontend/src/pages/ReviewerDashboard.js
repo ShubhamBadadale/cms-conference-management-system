@@ -1,11 +1,37 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Layout from "../components/Layout";
-import { getAssignedPapers, submitReview } from "../services/api";
+import {
+  getAssignedPapers,
+  getReviewerWorkload,
+  submitReview,
+} from "../services/api";
 import { useAuth } from "../context/AuthContext";
+
+const initialWorkload = {
+  assigned_count: 0,
+  completed_count: 0,
+  pending_count: 0,
+  avg_score_given: null,
+};
+
+const initialReviewForm = {
+  originality_score: 5,
+  technical_quality_score: 5,
+  clarity_score: 5,
+  relevance_score: 5,
+  comments: "",
+};
+
+const scoreFields = [
+  ["originality_score", "Originality"],
+  ["technical_quality_score", "Technical Quality"],
+  ["clarity_score", "Clarity"],
+  ["relevance_score", "Relevance"],
+];
 
 const ScoreSlider = ({ label, name, value, onChange }) => (
   <div className="form-group">
-    <label>{label}</label>
+    <label>{label} (0-10)</label>
     <div className="score-input">
       <input
         type="range"
@@ -21,77 +47,173 @@ const ScoreSlider = ({ label, name, value, onChange }) => (
   </div>
 );
 
+const StatCard = ({ label, value, color }) => (
+  <div className="stat-card">
+    <div className="stat-number" style={color ? { color } : undefined}>
+      {value}
+    </div>
+    <div className="stat-label">{label}</div>
+  </div>
+);
+
 export default function ReviewerDashboard() {
   const { user } = useAuth();
   const [papers, setPapers] = useState([]);
+  const [workload, setWorkload] = useState(initialWorkload);
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState(null);
-  const [reviewForm, setReviewForm] = useState({
-    originality_score: 5,
-    technical_quality_score: 5,
-    clarity_score: 5,
-    relevance_score: 5,
-    comments: "",
-  });
-  const [msg, setMsg] = useState({});
+  const [submittingId, setSubmittingId] = useState(null);
+  const [reviewForm, setReviewForm] = useState(initialReviewForm);
+  const [messages, setMessages] = useState({});
+  const [pageError, setPageError] = useState("");
 
-  useEffect(() => {
-    getAssignedPapers()
-      .then((r) => setPapers(r.data))
-      .finally(() => setLoading(false));
+  const loadDashboard = useCallback(async () => {
+    setPageError("");
+    const [workloadResponse, assignedResponse] = await Promise.all([
+      getReviewerWorkload(),
+      getAssignedPapers(),
+    ]);
+
+    setWorkload(workloadResponse.data || initialWorkload);
+    setPapers(assignedResponse.data || []);
   }, []);
 
+  useEffect(() => {
+    loadDashboard()
+      .catch((err) => {
+        setPageError(
+          err.response?.data?.message || "Unable to load reviewer dashboard"
+        );
+      })
+      .finally(() => setLoading(false));
+  }, [loadDashboard]);
+
+  const averageScore = useMemo(() => {
+    const total =
+      Number(reviewForm.originality_score) +
+      Number(reviewForm.technical_quality_score) +
+      Number(reviewForm.clarity_score) +
+      Number(reviewForm.relevance_score);
+
+    return (total / 4).toFixed(2);
+  }, [reviewForm]);
+
+  const setPaperMessage = (paperId, type, text) => {
+    setMessages((prev) => ({
+      ...prev,
+      [paperId]: { type, text },
+    }));
+  };
+
+  const handleFormChange = (event) => {
+    const { name, value } = event.target;
+    setReviewForm((prev) => ({
+      ...prev,
+      [name]: name === "comments" ? value : Number(value),
+    }));
+  };
+
+  const validateScores = () => {
+    return scoreFields.every(([name]) => {
+      const value = Number(reviewForm[name]);
+      return Number.isFinite(value) && value >= 0 && value <= 10;
+    });
+  };
+
   const handleReview = async (paperId) => {
+    if (!validateScores()) {
+      setPaperMessage(paperId, "error", "Scores must be between 0 and 10.");
+      return;
+    }
+
+    setSubmittingId(paperId);
+
     try {
-      await submitReview({ paper_id: paperId, ...reviewForm });
-      setMsg((prev) => ({
-        ...prev,
-        [paperId]: { type: "success", text: "Review submitted!" },
-      }));
+      await submitReview({
+        paper_id: paperId,
+        originality_score: reviewForm.originality_score,
+        technical_quality_score: reviewForm.technical_quality_score,
+        clarity_score: reviewForm.clarity_score,
+        relevance_score: reviewForm.relevance_score,
+        comments: reviewForm.comments,
+      });
+
+      setPaperMessage(paperId, "success", "Review submitted successfully.");
       setReviewingId(null);
-      const r = await getAssignedPapers();
-      setPapers(r.data);
+      setReviewForm(initialReviewForm);
+      await loadDashboard();
     } catch (err) {
-      setMsg((prev) => ({
-        ...prev,
-        [paperId]: {
-          type: "error",
-          text: err.response?.data?.message || "Failed",
-        },
-      }));
+      setPaperMessage(
+        paperId,
+        "error",
+        err.response?.data?.message || "Failed to submit review."
+      );
+    } finally {
+      setSubmittingId(null);
     }
   };
 
-  const handled = papers.filter((p) => p.reviewed > 0);
-  const pending = papers.filter((p) => p.reviewed === 0);
+  const handleDownload = async (paper) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`/api/papers/${paper.id}/download`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      setPaperMessage(paper.id, "error", "Unable to download this paper.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${paper.title || "paper"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const openReviewForm = (paperId) => {
+    setReviewingId((current) => (current === paperId ? null : paperId));
+    setReviewForm(initialReviewForm);
+  };
 
   return (
     <Layout>
       <div className="page-header">
         <h1>Reviewer Dashboard</h1>
-        <p>Welcome, {user?.name} — review assigned papers below</p>
+        <p>Welcome, {user?.name}. Review assigned papers below.</p>
       </div>
+
       <div
         className="stats-grid"
-        style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}
       >
-        <div className="stat-card">
-          <div className="stat-number">{papers.length}</div>
-          <div className="stat-label">Assigned Papers</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-number" style={{ color: "#975a16" }}>
-            {pending.length}
-          </div>
-          <div className="stat-label">Pending Review</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-number" style={{ color: "#2d7d46" }}>
-            {handled.length}
-          </div>
-          <div className="stat-label">Reviewed</div>
-        </div>
+        <StatCard label="Assigned Papers" value={workload.assigned_count || 0} />
+        <StatCard
+          label="Pending Review"
+          value={workload.pending_count || 0}
+          color="#975a16"
+        />
+        <StatCard
+          label="Reviewed"
+          value={workload.completed_count || 0}
+          color="#2d7d46"
+        />
+        <StatCard
+          label="Avg Score Given"
+          value={
+            workload.avg_score_given == null
+              ? "N/A"
+              : Number(workload.avg_score_given).toFixed(2)
+          }
+          color="#1e3a5f"
+        />
       </div>
+
+      {pageError && <div className="alert alert-error">{pageError}</div>}
 
       {loading ? (
         <div className="spinner" />
@@ -109,10 +231,11 @@ export default function ReviewerDashboard() {
                 gap: 12,
               }}
             >
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 240 }}>
                 <h3 style={{ fontSize: 17 }}>{paper.title}</h3>
                 <div style={{ fontSize: 13, color: "#718096", marginTop: 4 }}>
-                  by {paper.author_name} ({paper.institution}) &bull;{" "}
+                  by {paper.author_name}
+                  {paper.institution ? ` (${paper.institution})` : ""} |{" "}
                   {paper.conference_title}
                 </div>
                 <div
@@ -123,10 +246,14 @@ export default function ReviewerDashboard() {
                     lineHeight: 1.6,
                   }}
                 >
-                  {paper.abstract?.slice(0, 200)}
-                  {paper.abstract?.length > 200 ? "..." : ""}
+                  {paper.abstract
+                    ? `${paper.abstract.slice(0, 220)}${
+                        paper.abstract.length > 220 ? "..." : ""
+                      }`
+                    : "No abstract provided."}
                 </div>
               </div>
+
               <div
                 style={{
                   display: "flex",
@@ -135,66 +262,40 @@ export default function ReviewerDashboard() {
                   alignItems: "flex-end",
                 }}
               >
-                {paper.reviewed > 0 ? (
-                  <span className="badge badge-accepted">✓ Reviewed</span>
+                {Number(paper.reviewed) > 0 ? (
+                  <span className="badge badge-accepted">Reviewed</span>
                 ) : (
                   <span className="badge badge-submitted">Pending</span>
                 )}
                 <button
+                  type="button"
                   className="btn btn-outline btn-sm"
-                  onClick={async () => {
-                    const token = localStorage.getItem("token");
-
-                    const response = await fetch(
-                      `http://localhost:5000/api/papers/${paper.id}/download`,
-                      {
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
-                      },
-                    );
-
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "paper.pdf";
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                  }}
+                  onClick={() => handleDownload(paper)}
                 >
-                  📥 Download PDF
+                  Download PDF
                 </button>
                 <button
+                  type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setReviewingId(reviewingId === paper.id ? null : paper.id);
-                    setReviewForm({
-                      originality_score: 5,
-                      technical_quality_score: 5,
-                      clarity_score: 5,
-                      relevance_score: 5,
-                      comments: "",
-                    });
-                  }}
+                  onClick={() => openReviewForm(paper.id)}
                 >
                   {reviewingId === paper.id
                     ? "Cancel"
-                    : paper.reviewed > 0
-                      ? "✏ Update Review"
-                      : "📝 Write Review"}
+                    : Number(paper.reviewed) > 0
+                      ? "Update Review"
+                      : "Write Review"}
                 </button>
               </div>
             </div>
 
-            {msg[paper.id] && (
+            {messages[paper.id] && (
               <div
-                className={`alert alert-${msg[paper.id].type === "success" ? "success" : "error"}`}
+                className={`alert alert-${
+                  messages[paper.id].type === "success" ? "success" : "error"
+                }`}
                 style={{ marginTop: 12 }}
               >
-                {msg[paper.id].text}
+                {messages[paper.id].text}
               </div>
             )}
 
@@ -210,55 +311,21 @@ export default function ReviewerDashboard() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: "0 24px",
                   }}
                 >
-                  <ScoreSlider
-                    label="Originality (0-10)"
-                    name="originality_score"
-                    value={reviewForm.originality_score}
-                    onChange={(e) =>
-                      setReviewForm({
-                        ...reviewForm,
-                        originality_score: +e.target.value,
-                      })
-                    }
-                  />
-                  <ScoreSlider
-                    label="Technical Quality (0-10)"
-                    name="technical_quality_score"
-                    value={reviewForm.technical_quality_score}
-                    onChange={(e) =>
-                      setReviewForm({
-                        ...reviewForm,
-                        technical_quality_score: +e.target.value,
-                      })
-                    }
-                  />
-                  <ScoreSlider
-                    label="Clarity (0-10)"
-                    name="clarity_score"
-                    value={reviewForm.clarity_score}
-                    onChange={(e) =>
-                      setReviewForm({
-                        ...reviewForm,
-                        clarity_score: +e.target.value,
-                      })
-                    }
-                  />
-                  <ScoreSlider
-                    label="Relevance (0-10)"
-                    name="relevance_score"
-                    value={reviewForm.relevance_score}
-                    onChange={(e) =>
-                      setReviewForm({
-                        ...reviewForm,
-                        relevance_score: +e.target.value,
-                      })
-                    }
-                  />
+                  {scoreFields.map(([name, label]) => (
+                    <ScoreSlider
+                      key={name}
+                      label={label}
+                      name={name}
+                      value={reviewForm[name]}
+                      onChange={handleFormChange}
+                    />
+                  ))}
                 </div>
+
                 <div
                   style={{
                     background: "#f7f8fc",
@@ -269,33 +336,29 @@ export default function ReviewerDashboard() {
                 >
                   <strong>Average Score: </strong>
                   <span style={{ color: "#1e3a5f", fontWeight: 700 }}>
-                    {(
-                      (reviewForm.originality_score +
-                        reviewForm.technical_quality_score +
-                        reviewForm.clarity_score +
-                        reviewForm.relevance_score) /
-                      4
-                    ).toFixed(2)}
-                    /10
+                    {averageScore}/10
                   </span>
                 </div>
+
                 <div className="form-group">
                   <label>Comments for Author</label>
                   <textarea
                     className="form-control"
                     rows={4}
+                    name="comments"
                     placeholder="Provide constructive feedback to the author..."
                     value={reviewForm.comments}
-                    onChange={(e) =>
-                      setReviewForm({ ...reviewForm, comments: e.target.value })
-                    }
+                    onChange={handleFormChange}
                   />
                 </div>
+
                 <button
+                  type="button"
                   className="btn btn-success"
                   onClick={() => handleReview(paper.id)}
+                  disabled={submittingId === paper.id}
                 >
-                  ✓ Submit Review
+                  {submittingId === paper.id ? "Submitting..." : "Submit Review"}
                 </button>
               </div>
             )}

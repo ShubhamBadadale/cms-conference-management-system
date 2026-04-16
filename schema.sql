@@ -1,5 +1,8 @@
 -- Conference Management System - MySQL Schema
 -- Run this file to initialize the database
+-- Optional DBMS syllabus showcase:
+--   mysql -u root -p cms_db < sql/dbms_showcase.sql
+--   mysql -u root -p cms_db < sql/dbms_lab_queries.sql
 
 CREATE DATABASE IF NOT EXISTS cms_db;
 USE cms_db;
@@ -10,7 +13,7 @@ CREATE TABLE IF NOT EXISTS Users (
   name VARCHAR(100) NOT NULL,
   email VARCHAR(150) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
-  role ENUM('author', 'reviewer', 'admin', 'coordinator') NOT NULL,
+  role ENUM('pending', 'author', 'reviewer', 'admin', 'coordinator') NOT NULL DEFAULT 'pending',
   institution VARCHAR(200),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

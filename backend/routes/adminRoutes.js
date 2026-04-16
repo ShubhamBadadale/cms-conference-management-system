@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { auth, authorize } = require('../middleware/auth');
 const {
-  getAllUsers, getReviewers, assignReviewer, makeDecision,
+  getAllUsers, assignUserRole, getReviewers, assignReviewer, makeDecision,
   getAcceptedPapers, sendNotification, generateCertificate, getDashboardStats
 } = require('../controllers/adminController');
 
 router.get('/users', auth, authorize('admin'), getAllUsers);
+router.patch('/users/:id/role', auth, authorize('admin'), assignUserRole);
 router.get('/reviewers', auth, authorize('admin'), getReviewers);
 router.post('/assign-reviewer', auth, authorize('admin'), assignReviewer);
 router.post('/decision', auth, authorize('admin'), makeDecision);
