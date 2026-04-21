@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "start:worker": "node worker.js",
+    "dev:worker": "nodemon worker.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -16,9 +19,12 @@
     "mongodb": "^5.9.2",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.3.3",
-    "pdfkit": "^0.13.0"
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.15",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
+    "concurrently": "^9.0.1",
     "nodemon": "^2.0.22"
   }
 }

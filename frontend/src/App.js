@@ -1,7 +1,7 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -22,8 +22,18 @@ import './index.css';
 
 function RoleHome() {
   const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  const routes = { author: '/author', reviewer: '/reviewer', admin: '/admin', coordinator: '/coordinator' };
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const routes = {
+    author: '/author',
+    reviewer: '/reviewer',
+    admin: '/admin',
+    coordinator: '/coordinator',
+  };
+
   return <Navigate to={routes[user.role] || '/login'} replace />;
 }
 
@@ -32,13 +42,19 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/" element={<RoleHome />} />
-          <Route path="/unauthorized" element={<div style={{ padding: 40, textAlign: 'center' }}><h2>403 — Access Denied</h2><a href="/login">Go to Login</a></div>} />
+          <Route
+            path="/unauthorized"
+            element={(
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <h2>403 - Access Denied</h2>
+                <a href="/login">Go to Login</a>
+              </div>
+            )}
+          />
 
-          {/* Author */}
           <Route path="/author" element={<ProtectedRoute roles={['author']}><AuthorDashboard /></ProtectedRoute>} />
           <Route path="/conferences" element={<ProtectedRoute><ConferenceList /></ProtectedRoute>} />
           <Route path="/conferences/:id" element={<ProtectedRoute><ConferenceDetail /></ProtectedRoute>} />
@@ -46,11 +62,9 @@ export default function App() {
           <Route path="/my-submissions" element={<ProtectedRoute roles={['author']}><MySubmissions /></ProtectedRoute>} />
           <Route path="/certificates" element={<ProtectedRoute roles={['author']}><Certificates /></ProtectedRoute>} />
 
-          {/* Reviewer */}
           <Route path="/reviewer" element={<ProtectedRoute roles={['reviewer']}><ReviewerDashboard /></ProtectedRoute>} />
           <Route path="/assigned-papers" element={<ProtectedRoute roles={['reviewer']}><ReviewerDashboard /></ProtectedRoute>} />
 
-          {/* Admin */}
           <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/submissions" element={<ProtectedRoute roles={['admin']}><AdminSubmissions /></ProtectedRoute>} />
           <Route path="/admin/conferences" element={<ProtectedRoute roles={['admin']}><AdminConferences /></ProtectedRoute>} />
@@ -58,11 +72,9 @@ export default function App() {
           <Route path="/admin/accepted" element={<ProtectedRoute roles={['admin']}><AcceptedPapers /></ProtectedRoute>} />
           <Route path="/admin/notify" element={<ProtectedRoute roles={['admin']}><AdminNotify /></ProtectedRoute>} />
 
-          {/* Coordinator */}
           <Route path="/coordinator" element={<ProtectedRoute roles={['coordinator']}><CoordinatorDashboard /></ProtectedRoute>} />
           <Route path="/coordinator/schedule" element={<ProtectedRoute roles={['coordinator']}><CoordinatorDashboard /></ProtectedRoute>} />
 
-          {/* Shared */}
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import {
   getDashboardStats,
+  getEmailQueueOverview,
   getMyNotifications,
   getNoSqlAnalytics,
 } from '../services/api';
@@ -11,6 +12,16 @@ const emptyNoSqlAnalytics = {
   connected: false,
   source: 'loading',
   collection: 'conferenceAnalytics',
+  items: [],
+};
+
+const emptyEmailQueue = {
+  summary: {
+    pending: 0,
+    processing: 0,
+    sent: 0,
+    failed: 0,
+  },
   items: [],
 };
 
@@ -23,10 +34,15 @@ const StatCard = ({ label, value, color }) => (
   </div>
 );
 
+const formatQueueDecision = (decision) => (
+  decision ? decision.replace(/_/g, ' ') : 'N/A'
+);
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [notifs, setNotifs] = useState([]);
   const [noSqlAnalytics, setNoSqlAnalytics] = useState(emptyNoSqlAnalytics);
+  const [emailQueue, setEmailQueue] = useState(emptyEmailQueue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -35,13 +51,19 @@ export default function AdminDashboard() {
       setError('');
 
       try {
-        const [statsResponse, notificationsResponse] = await Promise.all([
+        const [
+          statsResponse,
+          notificationsResponse,
+          emailQueueResponse,
+        ] = await Promise.all([
           getDashboardStats(),
           getMyNotifications(),
+          getEmailQueueOverview(),
         ]);
 
         setStats(statsResponse.data);
-        setNotifs(notificationsResponse.data.slice(0, 5));
+        setNotifs((notificationsResponse.data || []).slice(0, 5));
+        setEmailQueue(emailQueueResponse.data || emptyEmailQueue);
       } catch (err) {
         setError(err.response?.data?.message || 'Unable to load dashboard');
       }
@@ -83,6 +105,14 @@ export default function AdminDashboard() {
             <StatCard label="Accepted" value={stats?.accepted} color="#2d7d46" />
             <StatCard label="Rejected" value={stats?.rejected} color="#c53030" />
             <StatCard label="Under Review" value={stats?.under_review} color="#975a16" />
+            <StatCard label="Flagged" value={stats?.flagged_for_review} color="#2c5282" />
+          </div>
+
+          <div className="email-queue-summary-grid">
+            <StatCard label="Email Pending" value={emailQueue.summary?.pending} color="#975a16" />
+            <StatCard label="Email Processing" value={emailQueue.summary?.processing} color="#2c5282" />
+            <StatCard label="Email Sent" value={emailQueue.summary?.sent} color="#2d7d46" />
+            <StatCard label="Email Failed" value={emailQueue.summary?.failed} color="#c53030" />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -102,9 +132,68 @@ export default function AdminDashboard() {
               {notifs.length === 0 ? (
                 <p style={{ color: '#718096', fontSize: 14 }}>No notifications yet</p>
               ) : (
-                notifs.map((n) => <div className="notif-item" key={n.id}>{n.message}</div>)
+                notifs.map((notification) => (
+                  <div className="notif-item" key={notification.id}>{notification.message}</div>
+                ))
               )}
             </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <h3>Email Queue Visibility</h3>
+                <p style={{ color: '#718096', fontSize: 13 }}>
+                  Review whether decision emails are pending, sent, or failed.
+                </p>
+              </div>
+            </div>
+
+            {emailQueue.items?.length === 0 ? (
+              <p style={{ color: '#718096', fontSize: 14 }}>
+                No queued decision emails yet.
+              </p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Paper</th>
+                      <th>Decision</th>
+                      <th>Recipient</th>
+                      <th>Status</th>
+                      <th>Attempts</th>
+                      <th>Updated</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emailQueue.items.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <strong>{item.paper_title || item.subject}</strong>
+                          {item.conference_title && (
+                            <div className="muted-copy">{item.conference_title}</div>
+                          )}
+                        </td>
+                        <td>{formatQueueDecision(item.decision)}</td>
+                        <td>{item.recipient_email}</td>
+                        <td>
+                          <span className={`badge badge-email-${item.status}`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td>{item.attempt_count}</td>
+                        <td>{new Date(item.updated_at).toLocaleString()}</td>
+                        <td className="email-queue-error-cell">
+                          {item.last_error || 'None'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="card">

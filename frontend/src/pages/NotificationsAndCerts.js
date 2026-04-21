@@ -1,10 +1,20 @@
-import React, { useEffect, useState } from "react";
-import Layout from "../components/Layout";
+import React, { useEffect, useState } from 'react';
+import DocumentViewer from '../components/DocumentViewer';
+import Layout from '../components/Layout';
 import {
+  getCertificateDocumentBlob,
+  getMyCertificates,
   getMyNotifications,
   markNotificationsRead,
-  getMyCertificates,
-} from "../services/api";
+} from '../services/api';
+
+const buildCertificateFileName = (paperTitle) => {
+  const safeTitle = String(paperTitle || 'certificate')
+    .replace(/[^a-z0-9-_]+/gi, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return `${safeTitle || 'certificate'}-certificate.pdf`;
+};
 
 export function Notifications() {
   const [notifs, setNotifs] = useState([]);
@@ -12,22 +22,22 @@ export function Notifications() {
 
   useEffect(() => {
     getMyNotifications()
-      .then((r) => setNotifs(r.data))
+      .then((response) => setNotifs(response.data))
       .finally(() => setLoading(false));
   }, []);
 
   const handleMarkRead = async () => {
     await markNotificationsRead();
-    setNotifs((prev) => prev.map((n) => ({ ...n, status: "read" })));
+    setNotifs((prev) => prev.map((notification) => ({ ...notification, status: 'read' })));
   };
 
   return (
     <Layout>
       <div className="page-header">
         <h1>Notifications</h1>
-        <p>{notifs.filter((n) => n.status === "unread").length} unread</p>
+        <p>{notifs.filter((notification) => notification.status === 'unread').length} unread</p>
       </div>
-      <div style={{ marginBottom: 12, textAlign: "right" }}>
+      <div style={{ marginBottom: 12, textAlign: 'right' }}>
         <button className="btn btn-outline btn-sm" onClick={handleMarkRead}>
           Mark All as Read
         </button>
@@ -38,36 +48,36 @@ export function Notifications() {
         <div className="alert alert-info">No notifications yet.</div>
       ) : (
         <div className="card">
-          {notifs.map((n) => (
+          {notifs.map((notification) => (
             <div
-              key={n.id}
-              className={`notif-item${n.status === "unread" ? " unread" : ""}`}
+              key={notification.id}
+              className={`notif-item${notification.status === 'unread' ? ' unread' : ''}`}
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
                   gap: 12,
                 }}
               >
                 <div>
-                  {n.status === "unread" && (
+                  {notification.status === 'unread' && (
                     <span
                       style={{
-                        display: "inline-block",
+                        display: 'inline-block',
                         width: 8,
                         height: 8,
-                        background: "#e07b39",
-                        borderRadius: "50%",
+                        background: '#e07b39',
+                        borderRadius: '50%',
                         marginRight: 8,
                       }}
                     />
                   )}
-                  {n.message}
+                  {notification.message}
                 </div>
-                <span style={{ fontSize: 11, color: "#a0aec0", flexShrink: 0 }}>
-                  {new Date(n.created_at).toLocaleString()}
+                <span style={{ fontSize: 11, color: '#a0aec0', flexShrink: 0 }}>
+                  {new Date(notification.created_at).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -81,10 +91,11 @@ export function Notifications() {
 export function Certificates() {
   const [certs, setCerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [previewingId, setPreviewingId] = useState(null);
 
   useEffect(() => {
     getMyCertificates()
-      .then((r) => setCerts(r.data))
+      .then((response) => setCerts(response.data))
       .finally(() => setLoading(false));
   }, []);
 
@@ -92,74 +103,59 @@ export function Certificates() {
     <Layout>
       <div className="page-header">
         <h1>My Certificates</h1>
-        <p>Download your acceptance certificates</p>
+        <p>View your acceptance certificates in the browser and download them separately when needed.</p>
       </div>
       {loading ? (
         <div className="spinner" />
       ) : certs.length === 0 ? (
         <div className="alert alert-info">
-          No certificates yet. Certificates are generated after paper
-          acceptance.
+          No certificates yet. Certificates are generated after paper acceptance.
         </div>
       ) : (
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
             gap: 20,
           }}
         >
           {certs.map((cert) => (
-            <div className="card" key={cert.id} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
-              <h3 style={{ fontSize: 16, marginBottom: 8 }}>
-                {cert.paper_title}
-              </h3>
-              <p style={{ fontSize: 13, color: "#718096", marginBottom: 16 }}>
-                {cert.conference_title}
-              </p>
-              <p style={{ fontSize: 12, color: "#a0aec0", marginBottom: 16 }}>
-                Generated: {new Date(cert.generated_date).toLocaleDateString()}
-              </p>
-              <button
-                className="btn btn-accent"
-                onClick={async () => {
-                  try {
-                    const token = localStorage.getItem("token");
+            <div className="card" key={cert.id}>
+              <div className="certificate-card-header">
+                <div>
+                  <h3 style={{ fontSize: 16, marginBottom: 8 }}>{cert.paper_title}</h3>
+                  <p style={{ fontSize: 13, color: '#718096', marginBottom: 8 }}>
+                    {cert.conference_title}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#a0aec0' }}>
+                    Generated: {new Date(cert.generated_date).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className="badge badge-accepted">Certificate</span>
+              </div>
 
-                    const response = await fetch(
-                      `http://localhost:5000/api/user/certificates/${cert.paper_id}/download`,
-                      {
-                        method: "GET",
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
-                      },
-                    );
+              <div style={{ marginTop: 14 }}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setPreviewingId((current) => (current === cert.id ? null : cert.id))}
+                >
+                  {previewingId === cert.id ? 'Hide Preview' : 'Preview Certificate'}
+                </button>
+              </div>
 
-                    if (!response.ok) {
-                      const text = await response.text();
-                      console.error("Download error:", text);
-                      alert("Certificate download failed");
-                      return;
-                    }
-
-                    const blob = await response.blob();
-
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "certificate.pdf";
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                  } catch (err) {
-                    console.error(err);
-                  }
-                }}
-              >
-                📥 Download Certificate
-              </button>
+              {previewingId === cert.id && (
+                <div style={{ marginTop: 16 }}>
+                  <DocumentViewer
+                    title="Certificate Preview"
+                    description="Open the certificate inside the browser and use the separate download button if you need a copy."
+                    fileName={buildCertificateFileName(cert.paper_title)}
+                    documentKey={`certificate-${cert.paper_id}`}
+                    loadDocument={() => getCertificateDocumentBlob(cert.paper_id)}
+                    height={420}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

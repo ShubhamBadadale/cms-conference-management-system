@@ -77,16 +77,11 @@ CREATE TABLE IF NOT EXISTS PaperKeywords (
 
 CREATE TABLE IF NOT EXISTS ReviewerExpertise (
   reviewer_id INT NOT NULL,
-  topic_id INT NOT NULL,
+  keyword VARCHAR(80) NOT NULL,
   expertise_level ENUM('basic', 'intermediate', 'expert') DEFAULT 'intermediate',
-  years_experience DECIMAL(4,1) DEFAULT 0,
-  PRIMARY KEY (reviewer_id, topic_id),
-  CONSTRAINT chk_reviewer_experience CHECK (years_experience >= 0),
+  PRIMARY KEY (reviewer_id, keyword),
   CONSTRAINT fk_reviewer_expertise_user
     FOREIGN KEY (reviewer_id) REFERENCES Users(id)
-    ON DELETE CASCADE,
-  CONSTRAINT fk_reviewer_expertise_topic
-    FOREIGN KEY (topic_id) REFERENCES Topics(id)
     ON DELETE CASCADE
 );
 
@@ -146,11 +141,30 @@ CREATE TABLE IF NOT EXISTS PaperFiles (
     ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS PaperVersions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  paper_id INT NOT NULL,
+  version_number INT NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  original_filename VARCHAR(255),
+  mime_type VARCHAR(100),
+  file_size BIGINT,
+  plagiarism_score DECIMAL(5,2),
+  plagiarism_flagged BOOLEAN NOT NULL DEFAULT FALSE,
+  plagiarism_notes VARCHAR(255),
+  is_active BOOLEAN DEFAULT TRUE,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_paper_versions (paper_id, version_number),
+  CONSTRAINT fk_paper_versions_paper
+    FOREIGN KEY (paper_id) REFERENCES Papers(id)
+    ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS PaperStatusHistory (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   paper_id INT NOT NULL,
-  old_status ENUM('submitted','under_review','revision','accepted','rejected') NULL,
-  new_status ENUM('submitted','under_review','revision','accepted','rejected') NOT NULL,
+  old_status ENUM('submitted','under_review','revision','accepted','rejected','flagged_for_review') NULL,
+  new_status ENUM('submitted','under_review','revision','accepted','rejected','flagged_for_review') NOT NULL,
   changed_by INT NULL,
   reason VARCHAR(255),
   changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -173,6 +187,30 @@ CREATE TABLE IF NOT EXISTS AuditLog (
   INDEX idx_audit_entity (entity_type, entity_id, created_at),
   CONSTRAINT fk_audit_actor
     FOREIGN KEY (actor_user_id) REFERENCES Users(id)
+    ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS EmailQueue (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  paper_id INT NULL,
+  user_id INT NULL,
+  email_type VARCHAR(50) NOT NULL,
+  recipient_email VARCHAR(150) NOT NULL,
+  subject VARCHAR(255) NOT NULL,
+  payload_json JSON NOT NULL,
+  status ENUM('pending','processing','sent','failed') NOT NULL DEFAULT 'pending',
+  attempt_count INT NOT NULL DEFAULT 0,
+  last_error TEXT NULL,
+  scheduled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_email_queue_status_schedule (status, scheduled_at),
+  CONSTRAINT fk_email_queue_paper
+    FOREIGN KEY (paper_id) REFERENCES Papers(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_email_queue_user
+    FOREIGN KEY (user_id) REFERENCES Users(id)
     ON DELETE SET NULL
 );
 
@@ -315,6 +353,11 @@ JOIN Users u ON u.id = p.author_id;
 
 INSERT IGNORE INTO PaperFiles (paper_id, version, file_path, is_active)
 SELECT id, version, file_path, TRUE
+FROM Papers
+WHERE file_path IS NOT NULL;
+
+INSERT IGNORE INTO PaperVersions (paper_id, version_number, file_path, original_filename, mime_type, is_active)
+SELECT id, version, file_path, file_path, 'application/pdf', TRUE
 FROM Papers
 WHERE file_path IS NOT NULL;
 
@@ -483,6 +526,9 @@ BEGIN
   IF NEW.file_path IS NOT NULL THEN
     INSERT IGNORE INTO PaperFiles (paper_id, version, file_path, is_active)
     VALUES (NEW.id, NEW.version, NEW.file_path, TRUE);
+
+    INSERT IGNORE INTO PaperVersions (paper_id, version_number, file_path, original_filename, mime_type, is_active)
+    VALUES (NEW.id, NEW.version, NEW.file_path, NEW.file_path, 'application/pdf', TRUE);
   END IF;
 
   INSERT INTO PaperStatusHistory (paper_id, old_status, new_status, reason)
@@ -512,6 +558,9 @@ BEGIN
      AND NEW.file_path IS NOT NULL THEN
     INSERT IGNORE INTO PaperFiles (paper_id, version, file_path, is_active)
     VALUES (NEW.id, NEW.version, NEW.file_path, TRUE);
+
+    INSERT IGNORE INTO PaperVersions (paper_id, version_number, file_path, original_filename, mime_type, is_active)
+    VALUES (NEW.id, NEW.version, NEW.file_path, NEW.file_path, 'application/pdf', TRUE);
   END IF;
 
   IF NOT (OLD.status <=> NEW.status)
@@ -754,7 +803,7 @@ BEGIN
 
   SELECT COUNT(*) INTO v_paper_count
   FROM Papers
-  WHERE id = p_paper_id;
+  WHERE id = p_paper_id AND is_active = TRUE;
 
   IF v_paper_count = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Paper not found';
@@ -767,7 +816,7 @@ BEGIN
 
   SELECT COUNT(*) INTO v_reviewer_count
   FROM Users
-  WHERE id = p_reviewer_id AND role = 'reviewer';
+  WHERE id = p_reviewer_id AND role = 'reviewer' AND is_active = TRUE;
 
   IF v_reviewer_count = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid reviewer';
@@ -786,7 +835,7 @@ BEGIN
 
   UPDATE Papers
   SET status = 'under_review'
-  WHERE id = p_paper_id AND status = 'submitted';
+  WHERE id = p_paper_id AND status = 'submitted' AND is_active = TRUE;
 
   INSERT INTO Notifications (user_id, message)
   VALUES (p_reviewer_id, CONCAT('You have been assigned to review: "', v_paper_title, '"'));
@@ -828,7 +877,7 @@ BEGIN
 
   SELECT COUNT(*) INTO v_paper_count
   FROM Papers
-  WHERE id = p_paper_id;
+  WHERE id = p_paper_id AND is_active = TRUE;
 
   IF v_paper_count = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Paper not found';
@@ -870,7 +919,7 @@ BEGIN
 
   UPDATE Papers
   SET status = 'under_review'
-  WHERE id = p_paper_id AND status = 'submitted';
+  WHERE id = p_paper_id AND status = 'submitted' AND is_active = TRUE;
 
   INSERT INTO Notifications (user_id, message)
   VALUES (v_author_id, CONCAT('Your paper "', v_paper_title, '" has received a review.'));
@@ -904,7 +953,7 @@ BEGIN
 
   SELECT COUNT(*) INTO v_paper_count
   FROM Papers
-  WHERE id = p_paper_id;
+  WHERE id = p_paper_id AND is_active = TRUE;
 
   IF v_paper_count = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Paper not found';

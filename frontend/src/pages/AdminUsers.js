@@ -1,130 +1,171 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout';
-import { getAllUsers, updateUserRole } from '../services/api';
+import { getAllUsers, updateUserActiveState, updateUserRole } from '../services/api';
+
+const filters = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'author', label: 'Authors' },
+  { value: 'reviewer', label: 'Reviewers' },
+  { value: 'coordinator', label: 'Coordinators' },
+  { value: 'admin', label: 'Admins' },
+];
+
+const getFilterCount = (users, filter) => {
+  if (filter === 'all') {
+    return users.length;
+  }
+
+  if (filter === 'archived') {
+    return users.filter((user) => !user.is_active).length;
+  }
+
+  return users.filter((user) => user.role === filter && user.is_active).length;
+};
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const [roleSelections, setRoleSelections] = useState({});
-  const [savingId, setSavingId] = useState(null);
-  const [feedback, setFeedback] = useState({ type: '', message: '' });
+  const [messages, setMessages] = useState({});
+  const [busyUserId, setBusyUserId] = useState(null);
+
+  const load = async () => {
+    const response = await getAllUsers();
+    setUsers(response.data || []);
+  };
 
   useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const response = await getAllUsers();
-        setUsers(response.data);
-      } catch (err) {
-        setFeedback({
-          type: 'error',
-          message: err.response?.data?.message || 'Unable to load users'
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUsers();
+    load()
+      .finally(() => setLoading(false));
   }, []);
 
-  const filtered = filter === 'all' ? users : users.filter((user) => user.role === filter);
-  const pendingCount = users.filter((user) => user.role === 'pending').length;
+  const filteredUsers = useMemo(() => {
+    if (filter === 'all') {
+      return users;
+    }
 
-  const handleApprove = async (userId) => {
-    const role = roleSelections[userId] || 'author';
-    setSavingId(userId);
-    setFeedback({ type: '', message: '' });
+    if (filter === 'archived') {
+      return users.filter((user) => !user.is_active);
+    }
+
+    return users.filter((user) => user.role === filter && user.is_active);
+  }, [filter, users]);
+
+  const setUserMessage = (userId, type, text) => {
+    setMessages((current) => ({ ...current, [userId]: { type, text } }));
+  };
+
+  const handleApprove = async (userId, role) => {
+    setBusyUserId(userId);
 
     try {
       await updateUserRole(userId, role);
-      setUsers((current) => current.map((user) => (
-        user.id === userId ? { ...user, role } : user
-      )));
-      setFeedback({ type: 'success', message: `User approved as ${role}.` });
+      setUserMessage(userId, 'success', `User approved as ${role}.`);
+      await load();
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        message: err.response?.data?.message || 'Unable to approve user'
-      });
+      setUserMessage(userId, 'error', err.response?.data?.message || 'Failed to approve user');
     } finally {
-      setSavingId(null);
+      setBusyUserId(null);
+    }
+  };
+
+  const handleActiveToggle = async (user) => {
+    setBusyUserId(user.id);
+
+    try {
+      await updateUserActiveState(user.id, !user.is_active);
+      setUserMessage(
+        user.id,
+        'success',
+        `User ${user.is_active ? 'archived' : 'reactivated'} successfully.`
+      );
+      await load();
+    } catch (err) {
+      setUserMessage(user.id, 'error', err.response?.data?.message || 'Failed to update user state');
+    } finally {
+      setBusyUserId(null);
     }
   };
 
   return (
     <Layout>
       <div className="page-header">
-        <h1>User Management</h1>
-        <p>{users.length} total registered users, including {pendingCount} pending approvals</p>
+        <h1>Manage Users</h1>
+        <p>Approve new accounts, archive inactive users, and keep role assignments tidy.</p>
       </div>
-      {feedback.message && (
-        <div className={`alert alert-${feedback.type === 'error' ? 'error' : 'success'}`}>
-          {feedback.message}
-        </div>
-      )}
+
       <div className="tabs">
-        {['all', 'pending', 'author', 'reviewer', 'admin', 'coordinator'].map((role) => (
-          <button key={role} className={`tab-btn${filter === role ? ' active' : ''}`} onClick={() => setFilter(role)}>
-            {role.charAt(0).toUpperCase() + role.slice(1)} ({role === 'all' ? users.length : users.filter((user) => user.role === role).length})
+        {filters.map((tab) => (
+          <button
+            key={tab.value}
+            className={`tab-btn${filter === tab.value ? ' active' : ''}`}
+            onClick={() => setFilter(tab.value)}
+          >
+            {tab.label} ({getFilterCount(users, tab.value)})
           </button>
         ))}
       </div>
-      {loading ? <div className="spinner" /> : (
-        <div className="card">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Institution</th>
-                  <th>Joined</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((user, index) => (
-                  <tr key={user.id}>
-                    <td style={{ color: '#a0aec0' }}>{index + 1}</td>
-                    <td><strong>{user.name}</strong></td>
-                    <td>{user.email}</td>
-                    <td><span className={`badge badge-${user.role}`}>{user.role}</span></td>
-                    <td>{user.institution || '-'}</td>
-                    <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                    <td>
-                      {user.role === 'pending' ? (
-                        <div className="user-role-action">
-                          <select
-                            className="form-control"
-                            value={roleSelections[user.id] || 'author'}
-                            onChange={(e) => setRoleSelections((current) => ({ ...current, [user.id]: e.target.value }))}
-                            disabled={savingId === user.id}
-                          >
-                            <option value="author">Author</option>
-                            <option value="reviewer">Reviewer</option>
-                            <option value="coordinator">Coordinator</option>
-                          </select>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => handleApprove(user.id)}
-                            disabled={savingId === user.id}
-                          >
-                            {savingId === user.id ? 'Saving...' : 'Approve'}
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="table-note">Approved</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+      {loading ? (
+        <div className="spinner" />
+      ) : filteredUsers.length === 0 ? (
+        <div className="alert alert-info">No users match the selected filter.</div>
+      ) : (
+        filteredUsers.map((user) => (
+          <div className={`card ${user.is_active ? '' : 'card-archived'}`} key={user.id}>
+            <div className="admin-paper-header">
+              <div style={{ flex: 1, minWidth: 260 }}>
+                <h3 style={{ fontSize: 17 }}>{user.name}</h3>
+                <div className="muted-copy" style={{ marginTop: 4 }}>
+                  {user.email}
+                </div>
+                <div className="muted-copy" style={{ marginTop: 6 }}>
+                  {user.institution || 'No institution listed'}
+                </div>
+                <div className="muted-copy" style={{ marginTop: 6 }}>
+                  Joined {new Date(user.created_at).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="stacked-actions">
+                <div className="inline-actions">
+                  <span className={`badge badge-${user.role}`}>{user.role}</span>
+                  <span className={`badge ${user.is_active ? 'badge-active' : 'badge-archived'}`}>
+                    {user.is_active ? 'Active' : 'Archived'}
+                  </span>
+                </div>
+                <button className="btn btn-outline btn-sm" disabled={busyUserId === user.id} onClick={() => handleActiveToggle(user)}>
+                  {user.is_active ? 'Archive' : 'Reactivate'}
+                </button>
+              </div>
+            </div>
+
+            {messages[user.id] && (
+              <div className={`alert alert-${messages[user.id].type === 'success' ? 'success' : 'error'}`} style={{ marginTop: 14 }}>
+                {messages[user.id].text}
+              </div>
+            )}
+
+            {user.role === 'pending' && user.is_active && (
+              <div className="admin-paper-toolbar">
+                <div className="inline-actions">
+                  <strong className="table-note">Approve As</strong>
+                  <button className="btn btn-primary btn-sm" disabled={busyUserId === user.id} onClick={() => handleApprove(user.id, 'author')}>
+                    Author
+                  </button>
+                  <button className="btn btn-primary btn-sm" disabled={busyUserId === user.id} onClick={() => handleApprove(user.id, 'reviewer')}>
+                    Reviewer
+                  </button>
+                  <button className="btn btn-primary btn-sm" disabled={busyUserId === user.id} onClick={() => handleApprove(user.id, 'coordinator')}>
+                    Coordinator
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        ))
       )}
     </Layout>
   );

@@ -1,59 +1,117 @@
-import React, { useEffect, useState } from "react";
-import Layout from "../components/Layout";
+import React, { useEffect, useState } from 'react';
+import Layout from '../components/Layout';
 import {
-  getAllConferencesAdmin,
   createConference,
+  downloadConferenceProceedings,
+  getAllConferencesAdmin,
   publishConference,
-} from "../services/api";
+  updateConferenceActiveState,
+} from '../services/api';
+
+const downloadBlob = (blob, fileName) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
 
 export default function AdminConferences() {
   const [conferences, setConferences] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
-    title: "",
-    description: "",
-    topics: "",
-    venue: "",
-    submission_deadline: "",
+    title: '',
+    description: '',
+    topics: '',
+    venue: '',
+    submission_deadline: '',
   });
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busyConferenceId, setBusyConferenceId] = useState(null);
 
-  const load = () =>
-    getAllConferencesAdmin()
-      .then((r) => setConferences(r.data))
-      .finally(() => setLoading(false));
+  const load = async () => {
+    const response = await getAllConferencesAdmin();
+    setConferences(response.data || []);
+  };
+
   useEffect(() => {
-    load();
+    load()
+      .finally(() => setLoading(false));
   }, []);
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    setErr("");
+  const handleCreate = async (event) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
     try {
       await createConference(form);
-      setMsg("Conference created!");
+      setMessage('Conference created successfully.');
       setShowForm(false);
       setForm({
-        title: "",
-        description: "",
-        topics: "",
-        venue: "",
-        submission_deadline: "",
+        title: '',
+        description: '',
+        topics: '',
+        venue: '',
+        submission_deadline: '',
       });
-      load();
+      await load();
     } catch (err) {
-      setErr(err.response?.data?.message || "Failed");
+      setError(err.response?.data?.message || 'Failed to create conference');
     }
   };
 
-  const handlePublish = async (id) => {
+  const handlePublish = async (conferenceId) => {
+    setBusyConferenceId(conferenceId);
+    setError('');
+    setMessage('');
+
     try {
-      await publishConference(id);
-      load();
+      await publishConference(conferenceId);
+      setMessage('Conference published successfully.');
+      await load();
     } catch (err) {
-      alert(err.response?.data?.message || "Failed");
+      setError(err.response?.data?.message || 'Failed to publish conference');
+    } finally {
+      setBusyConferenceId(null);
+    }
+  };
+
+  const handleActiveToggle = async (conference) => {
+    setBusyConferenceId(conference.id);
+    setError('');
+    setMessage('');
+
+    try {
+      await updateConferenceActiveState(conference.id, !conference.is_active);
+      setMessage(`Conference ${conference.is_active ? 'archived' : 'reactivated'} successfully.`);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update conference state');
+    } finally {
+      setBusyConferenceId(null);
+    }
+  };
+
+  const handleDownloadProceedings = async (conference) => {
+    setBusyConferenceId(conference.id);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await downloadConferenceProceedings(conference.id);
+      const fileName = `${conference.title.replace(/[^a-z0-9-_]+/gi, '_')}-proceedings.pdf`;
+      downloadBlob(response.data, fileName);
+      setMessage(`Proceedings download started for ${conference.title}.`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to download proceedings');
+    } finally {
+      setBusyConferenceId(null);
     }
   };
 
@@ -61,20 +119,21 @@ export default function AdminConferences() {
     <Layout>
       <div className="page-header">
         <h1>Manage Conferences</h1>
+        <p>Create conferences, archive them when needed, and download proceedings for accepted papers.</p>
       </div>
-      {msg && <div className="alert alert-success">{msg}</div>}
-      <div style={{ marginBottom: 16 }}>
-        <button
-          className="btn btn-accent"
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? "✕ Cancel" : "+ Create Conference"}
+
+      {message && <div className="alert alert-success">{message}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
+
+      <div className="page-toolbar">
+        <button className="btn btn-accent" onClick={() => setShowForm((current) => !current)}>
+          {showForm ? 'Close Form' : 'Create Conference'}
         </button>
       </div>
+
       {showForm && (
-        <div className="card" style={{ maxWidth: 600, marginBottom: 24 }}>
+        <div className="card" style={{ maxWidth: 720 }}>
           <h3 style={{ marginBottom: 16 }}>New Conference</h3>
-          {err && <div className="alert alert-error">{err}</div>}
           <form onSubmit={handleCreate}>
             <div className="form-group">
               <label>Title *</label>
@@ -82,61 +141,55 @@ export default function AdminConferences() {
                 className="form-control"
                 required
                 value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                onChange={(event) => setForm({ ...form, title: event.target.value })}
               />
             </div>
+
             <div className="form-group">
               <label>Description</label>
               <textarea
                 className="form-control"
                 value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
+                onChange={(event) => setForm({ ...form, description: event.target.value })}
               />
             </div>
+
             <div className="form-group">
               <label>Topics (comma-separated)</label>
               <input
                 className="form-control"
-                placeholder="AI, Machine Learning, NLP"
+                placeholder="AI, distributed systems, HCI"
                 value={form.topics}
-                onChange={(e) => setForm({ ...form, topics: e.target.value })}
+                onChange={(event) => setForm({ ...form, topics: event.target.value })}
               />
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 16,
-              }}
-            >
+
+            <div className="detail-grid">
               <div className="form-group">
                 <label>Venue</label>
                 <input
                   className="form-control"
                   value={form.venue}
-                  onChange={(e) => setForm({ ...form, venue: e.target.value })}
+                  onChange={(event) => setForm({ ...form, venue: event.target.value })}
                 />
               </div>
+
               <div className="form-group">
                 <label>Submission Deadline</label>
                 <input
                   className="form-control"
                   type="date"
                   value={form.submission_deadline}
-                  onChange={(e) =>
-                    setForm({ ...form, submission_deadline: e.target.value })
-                  }
+                  onChange={(event) => setForm({ ...form, submission_deadline: event.target.value })}
                 />
               </div>
             </div>
-            <button className="btn btn-primary" type="submit">
-              Create Conference
-            </button>
+
+            <button className="btn btn-primary" type="submit">Create Conference</button>
           </form>
         </div>
       )}
+
       {loading ? (
         <div className="spinner" />
       ) : (
@@ -145,39 +198,65 @@ export default function AdminConferences() {
             <table>
               <thead>
                 <tr>
-                  <th>Title</th>
+                  <th>Conference</th>
                   <th>Venue</th>
                   <th>Deadline</th>
                   <th>Status</th>
+                  <th>Archive State</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {conferences.map((c) => (
-                  <tr key={c.id}>
+                {conferences.map((conference) => (
+                  <tr key={conference.id} className={conference.is_active ? '' : 'inactive-row'}>
                     <td>
-                      <strong>{c.title}</strong>
+                      <strong>{conference.title}</strong>
+                      {conference.topics && (
+                        <div className="muted-copy" style={{ marginTop: 4 }}>
+                          {conference.topics}
+                        </div>
+                      )}
                     </td>
-                    <td>{c.venue || "—"}</td>
+                    <td>{conference.venue || 'Not set'}</td>
                     <td>
-                      {c.submission_deadline
-                        ? new Date(c.submission_deadline).toLocaleDateString()
-                        : "—"}
+                      {conference.submission_deadline
+                        ? new Date(conference.submission_deadline).toLocaleDateString()
+                        : 'Not set'}
                     </td>
                     <td>
-                      <span className={`badge badge-${c.status}`}>
-                        {c.status}
+                      <span className={`badge badge-${conference.status}`}>{conference.status}</span>
+                    </td>
+                    <td>
+                      <span className={`badge ${conference.is_active ? 'badge-active' : 'badge-archived'}`}>
+                        {conference.is_active ? 'Active' : 'Archived'}
                       </span>
                     </td>
                     <td>
-                      {c.status === "draft" && (
+                      <div className="table-actions">
+                        {conference.status === 'draft' && conference.is_active && (
+                          <button
+                            className="btn btn-success btn-sm"
+                            disabled={busyConferenceId === conference.id}
+                            onClick={() => handlePublish(conference.id)}
+                          >
+                            Publish
+                          </button>
+                        )}
                         <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => handlePublish(c.id)}
+                          className="btn btn-outline btn-sm"
+                          disabled={busyConferenceId === conference.id || !conference.is_active}
+                          onClick={() => handleDownloadProceedings(conference)}
                         >
-                          🌐 Publish
+                          Proceedings
                         </button>
-                      )}
+                        <button
+                          className="btn btn-outline btn-sm"
+                          disabled={busyConferenceId === conference.id}
+                          onClick={() => handleActiveToggle(conference)}
+                        >
+                          {conference.is_active ? 'Archive' : 'Reactivate'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

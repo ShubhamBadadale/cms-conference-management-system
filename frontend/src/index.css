@@ -177,7 +177,7 @@ tbody tr:hover { background: var(--bg); }
 .notif-item:last-child { border-bottom: none; }
 
 /* Tabs */
-.tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 2px solid var(--border); }
+.tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
 .tab-btn { padding: 10px 18px; background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.18s; }
 .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 
@@ -214,9 +214,319 @@ tbody tr:hover { background: var(--bg); }
   font-size: 13px;
 }
 
+.muted-copy {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card-archived {
+  background: #f8fafc;
+  border-style: dashed;
+}
+
+.badge-flagged_for_review {
+  background: #ebf8ff;
+  color: #2c5282;
+}
+
+.badge-active {
+  background: #f0fff4;
+  color: #276749;
+}
+
+.badge-archived,
+.badge-inactive {
+  background: #edf2f7;
+  color: #4a5568;
+}
+
+.badge-closed {
+  background: #e9d8fd;
+  color: #553c9a;
+}
+
+.status-panel {
+  background: #f7f8fc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.status-panel-warning {
+  background: #fffaf0;
+  border-color: #f6ad55;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.version-list {
+  display: grid;
+  gap: 12px;
+}
+
+.version-history-card {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.keyword-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyword-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #2d3748;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.keyword-chip button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+}
+
+.expertise-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-paper-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.stacked-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-paper-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.admin-paper-details {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.admin-select {
+  width: auto;
+  min-width: 220px;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.reviewer-suggestion-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.reviewer-suggestion-card {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.document-viewer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fdfefe;
+  overflow: hidden;
+}
+
+.document-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, #f8fbff 0%, #fffdf9 100%);
+}
+
+.document-viewer-header h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.document-viewer-header p {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.document-viewer-body {
+  padding: 16px;
+  background: #f4f7fb;
+}
+
+.document-viewer-loading {
+  min-height: 180px;
+}
+
+.document-viewer-frame {
+  width: 100%;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: white;
+}
+
+.finalized-summary {
+  border: 1px solid #d9eadf;
+  border-radius: 14px;
+  padding: 18px;
+  background: linear-gradient(135deg, #f7fff8 0%, #ffffff 60%);
+}
+
+.finalized-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d9eadf;
+}
+
+.finalized-banner p {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.finalized-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.finalized-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.finalized-metric:last-of-type {
+  border-bottom: none;
+}
+
+.status-panel-locked {
+  background: #fffaf5;
+  border-color: #f6ad55;
+}
+
+.email-queue-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.badge-email-pending {
+  background: #fff7e6;
+  color: #975a16;
+}
+
+.badge-email-processing {
+  background: #ebf8ff;
+  color: #2c5282;
+}
+
+.badge-email-sent {
+  background: #f0fff4;
+  color: #276749;
+}
+
+.badge-email-failed {
+  background: #fff5f5;
+  color: #c53030;
+}
+
+.email-queue-error-cell {
+  max-width: 280px;
+  color: #7b341e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.certificate-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inactive-row {
+  opacity: 0.75;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar { width: 200px; }
   .main-content { margin-left: 200px; padding: 20px; }
   .user-role-action { min-width: 180px; }
+  .expertise-editor { grid-template-columns: 1fr; }
+  .page-toolbar { align-items: stretch; }
+  .admin-select { width: 100%; min-width: 0; }
+  .document-viewer-header,
+  .finalized-banner,
+  .certificate-card-header {
+    flex-direction: column;
+  }
 }

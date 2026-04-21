@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS Users (
   password VARCHAR(255) NOT NULL,
   role ENUM('pending', 'author', 'reviewer', 'admin', 'coordinator') NOT NULL DEFAULT 'pending',
   institution VARCHAR(200),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS Conferences (
   submission_deadline DATE,
   status ENUM('draft', 'published', 'closed') DEFAULT 'draft',
   created_by INT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES Users(id) ON DELETE SET NULL
 );
@@ -41,8 +43,9 @@ CREATE TABLE IF NOT EXISTS Papers (
   file_path VARCHAR(500),
   author_id INT NOT NULL,
   conference_id INT NOT NULL,
-  status ENUM('submitted','under_review','revision','accepted','rejected') DEFAULT 'submitted',
+  status ENUM('submitted','under_review','revision','accepted','rejected','flagged_for_review') DEFAULT 'submitted',
   version INT DEFAULT 1,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (author_id) REFERENCES Users(id) ON DELETE CASCADE,
   FOREIGN KEY (conference_id) REFERENCES Conferences(id) ON DELETE CASCADE
@@ -111,6 +114,69 @@ CREATE TABLE IF NOT EXISTS Notifications (
   FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
 );
 
+-- Normalized Paper Keywords
+CREATE TABLE IF NOT EXISTS PaperKeywords (
+  paper_id INT NOT NULL,
+  keyword VARCHAR(80) NOT NULL,
+  PRIMARY KEY (paper_id, keyword),
+  INDEX idx_paper_keywords_keyword (keyword),
+  FOREIGN KEY (paper_id) REFERENCES Papers(id) ON DELETE CASCADE
+);
+
+-- Reviewer Expertise
+CREATE TABLE IF NOT EXISTS ReviewerExpertise (
+  reviewer_id INT NOT NULL,
+  keyword VARCHAR(80) NOT NULL,
+  expertise_level ENUM('basic', 'intermediate', 'expert') NOT NULL DEFAULT 'intermediate',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (reviewer_id, keyword),
+  INDEX idx_reviewer_expertise_keyword (keyword),
+  FOREIGN KEY (reviewer_id) REFERENCES Users(id) ON DELETE CASCADE
+);
+
+-- Paper version history
+CREATE TABLE IF NOT EXISTS PaperVersions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  paper_id INT NOT NULL,
+  version_number INT NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  original_filename VARCHAR(255),
+  mime_type VARCHAR(100),
+  file_size BIGINT,
+  plagiarism_score DECIMAL(5,2),
+  plagiarism_flagged BOOLEAN NOT NULL DEFAULT FALSE,
+  plagiarism_notes VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_paper_versions (paper_id, version_number),
+  FOREIGN KEY (paper_id) REFERENCES Papers(id) ON DELETE CASCADE
+);
+
+-- Email queue for async notifications
+CREATE TABLE IF NOT EXISTS EmailQueue (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  paper_id INT NULL,
+  user_id INT NULL,
+  email_type VARCHAR(50) NOT NULL,
+  recipient_email VARCHAR(150) NOT NULL,
+  subject VARCHAR(255) NOT NULL,
+  payload_json JSON NOT NULL,
+  status ENUM('pending','processing','sent','failed') NOT NULL DEFAULT 'pending',
+  attempt_count INT NOT NULL DEFAULT 0,
+  last_error TEXT NULL,
+  scheduled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_email_queue_status_schedule (status, scheduled_at),
+  FOREIGN KEY (paper_id) REFERENCES Papers(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE SET NULL
+);
+
 -- Seed Admin User (password: admin123)
-INSERT INTO Users (name, email, password, role, institution) VALUES
-('Admin User', 'admin@cms.com', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'CMS System');
+INSERT INTO Users (name, email, password, role, institution, is_active)
+SELECT 'Admin User', 'admin@cms.com', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'CMS System', TRUE
+WHERE NOT EXISTS (
+  SELECT 1 FROM Users WHERE email = 'admin@cms.com'
+);
