@@ -1,0 +1,10 @@
+ConferMS System Requirements
+
+Node.js 18.x or newer
+MySQL 8.x or newer
+Mailtrap SMTP account
+
+Notes:
+- npm is included with Node.js and is used for backend and frontend installs.
+- MySQL should be available locally before running the SQL scripts.
+- Mailtrap is used for the application email queue and notification previews.

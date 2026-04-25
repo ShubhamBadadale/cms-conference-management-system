@@ -98,9 +98,9 @@ export const sendNotification = (data) => API.post('/admin/notify', data);
 export const generateCertificate = (data) => API.post('/admin/generate-certificate', data);
 export const getDashboardStats = () => API.get('/admin/stats');
 export const getEmailQueueOverview = () => API.get('/admin/email-queue');
+export const getConferenceMetricsOverview = () => API.get('/admin/conference-metrics');
 export const updateConferenceActiveState = (conferenceId, isActive) => API.patch(`/admin/conferences/${conferenceId}/active`, { is_active: isActive });
 export const downloadConferenceProceedings = (conferenceId) => API.get(`/admin/conferences/${conferenceId}/proceedings/download`, { responseType: 'blob' });
-export const getNoSqlAnalytics = () => API.get('/nosql/analytics');
 
 // Coordinator
 export const getPresentationSchedule = () => API.get('/coordinator/schedule');

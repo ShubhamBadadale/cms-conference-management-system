@@ -2,16 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import {
+  getConferenceMetricsOverview,
   getDashboardStats,
   getEmailQueueOverview,
   getMyNotifications,
-  getNoSqlAnalytics,
 } from '../services/api';
 
-const emptyNoSqlAnalytics = {
+const emptyConferenceMetrics = {
   connected: false,
   source: 'loading',
-  collection: 'conferenceAnalytics',
+  generatedFrom: 'vw_conference_metrics_olap',
   items: [],
 };
 
@@ -41,7 +41,7 @@ const formatQueueDecision = (decision) => (
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [notifs, setNotifs] = useState([]);
-  const [noSqlAnalytics, setNoSqlAnalytics] = useState(emptyNoSqlAnalytics);
+  const [conferenceMetrics, setConferenceMetrics] = useState(emptyConferenceMetrics);
   const [emailQueue, setEmailQueue] = useState(emptyEmailQueue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -69,13 +69,13 @@ export default function AdminDashboard() {
       }
 
       try {
-        const analyticsResponse = await getNoSqlAnalytics();
-        setNoSqlAnalytics(analyticsResponse.data || emptyNoSqlAnalytics);
+        const metricsResponse = await getConferenceMetricsOverview();
+        setConferenceMetrics(metricsResponse.data || emptyConferenceMetrics);
       } catch (err) {
-        setNoSqlAnalytics({
-          ...emptyNoSqlAnalytics,
+        setConferenceMetrics({
+          ...emptyConferenceMetrics,
           source: 'unavailable',
-          message: err.response?.data?.message || 'NoSQL analytics unavailable',
+          message: err.response?.data?.message || 'Conference metrics unavailable',
         });
       } finally {
         setLoading(false);
@@ -199,23 +199,23 @@ export default function AdminDashboard() {
           <div className="card">
             <div className="card-header">
               <div>
-                <h3>NoSQL Analytics</h3>
+                <h3>Conference Metrics</h3>
                 <p style={{ color: '#718096', fontSize: 13 }}>
-                  MongoDB collection: {noSqlAnalytics.collection || 'conferenceAnalytics'}
+                  MySQL view: {conferenceMetrics.generatedFrom || 'vw_conference_metrics_olap'}
                 </p>
               </div>
-              <span className={`badge ${noSqlAnalytics.connected ? 'badge-accepted' : 'badge-revision'}`}>
-                {noSqlAnalytics.connected ? 'MongoDB Connected' : 'Fallback Mode'}
+              <span className={`badge ${conferenceMetrics.connected ? 'badge-accepted' : 'badge-revision'}`}>
+                {conferenceMetrics.connected ? 'MySQL View' : 'Unavailable'}
               </span>
             </div>
 
-            {noSqlAnalytics.message && (
-              <div className="alert alert-info">{noSqlAnalytics.message}</div>
+            {conferenceMetrics.message && (
+              <div className="alert alert-info">{conferenceMetrics.message}</div>
             )}
 
-            {noSqlAnalytics.items?.length === 0 ? (
+            {conferenceMetrics.items?.length === 0 ? (
               <p style={{ color: '#718096', fontSize: 14 }}>
-                No conference analytics available yet.
+                No conference metrics available yet.
               </p>
             ) : (
               <div className="table-wrap">
@@ -225,23 +225,33 @@ export default function AdminDashboard() {
                       <th>Conference</th>
                       <th>Total Papers</th>
                       <th>Accepted</th>
+                      <th>Rejected</th>
+                      <th>Revision</th>
                       <th>Under Review</th>
                       <th>Active Reviewers</th>
                       <th>Avg Review Score</th>
+                      <th>Avg Presentation Score</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {noSqlAnalytics.items.map((item) => (
-                      <tr key={item.conferenceId}>
-                        <td>{item.title}</td>
-                        <td>{item.metrics?.totalPapers ?? 0}</td>
-                        <td>{item.metrics?.acceptedPapers ?? 0}</td>
-                        <td>{item.metrics?.underReviewPapers ?? 0}</td>
-                        <td>{item.metrics?.activeReviewers ?? 0}</td>
+                    {conferenceMetrics.items.map((item) => (
+                      <tr key={item.conference_id}>
+                        <td>{item.conference_title}</td>
+                        <td>{item.total_papers ?? 0}</td>
+                        <td>{item.accepted_papers ?? 0}</td>
+                        <td>{item.rejected_papers ?? 0}</td>
+                        <td>{item.revision_papers ?? 0}</td>
+                        <td>{item.under_review_papers ?? 0}</td>
+                        <td>{item.active_reviewers ?? 0}</td>
                         <td>
-                          {item.metrics?.averageReviewScore == null
+                          {item.avg_review_score == null
                             ? 'N/A'
-                            : Number(item.metrics.averageReviewScore).toFixed(2)}
+                            : Number(item.avg_review_score).toFixed(2)}
+                        </td>
+                        <td>
+                          {item.avg_presentation_score == null
+                            ? 'N/A'
+                            : Number(item.avg_presentation_score).toFixed(2)}
                         </td>
                       </tr>
                     ))}
@@ -251,7 +261,7 @@ export default function AdminDashboard() {
             )}
 
             <p style={{ color: '#718096', fontSize: 12, marginTop: 12 }}>
-              Source: {noSqlAnalytics.source}. Generated from SQL view vw_conference_metrics_olap.
+              Source: {conferenceMetrics.source}. Generated directly from SQL view vw_conference_metrics_olap.
             </p>
           </div>
         </>

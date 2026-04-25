@@ -13,6 +13,7 @@ const {
   sendNotification,
   getAdminEmailQueue,
   getDashboardStats,
+  getConferenceMetricsOverview,
   getReviewerSuggestions,
   updateUserActiveState,
   updateConferenceActiveState,
@@ -34,6 +35,7 @@ router.post('/notify', auth, authorize('admin'), sendNotification);
 router.post('/generate-certificate', auth, authorize('admin'), generateCertificate);
 router.get('/stats', auth, authorize('admin'), getDashboardStats);
 router.get('/email-queue', auth, authorize('admin'), getAdminEmailQueue);
+router.get('/conference-metrics', auth, authorize('admin'), getConferenceMetricsOverview);
 router.patch('/conferences/:id/active', auth, authorize('admin'), updateConferenceActiveState);
 router.get('/conferences/:conference_id/proceedings/download', auth, authorize('admin'), downloadConferenceProceedings);
 

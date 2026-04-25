@@ -461,6 +461,35 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+const getConferenceMetricsOverview = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+        conference_id,
+        conference_title,
+        total_papers,
+        accepted_papers,
+        rejected_papers,
+        revision_papers,
+        under_review_papers,
+        active_reviewers,
+        avg_review_score,
+        avg_presentation_score
+       FROM vw_conference_metrics_olap
+       ORDER BY total_papers DESC, conference_title ASC`
+    );
+
+    res.json({
+      connected: true,
+      source: 'vw_conference_metrics_olap',
+      generatedFrom: 'vw_conference_metrics_olap',
+      items: rows,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 const getAdminEmailQueue = async (req, res) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 20;
@@ -550,6 +579,7 @@ module.exports = {
   getAdminEmailQueue,
   getAcceptedPapers,
   getAllUsers,
+  getConferenceMetricsOverview,
   getDashboardStats,
   getReviewerSuggestions,
   getReviewers,

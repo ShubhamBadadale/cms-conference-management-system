@@ -22,7 +22,6 @@ app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/coordinator', require('./routes/coordinatorRoutes'));
 app.use('/api/user', require('./routes/userRoutes'));
-app.use('/api/nosql', require('./routes/nosqlRoutes'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'CMS Backend Running' }));
